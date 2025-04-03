@@ -1,0 +1,27 @@
+# Go编译生成的二进制文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go测试输出
+*.test
+*.out
+
+# 前端相关
+node_modules
+dist
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 编辑器文件
+.idea
+.vscode
+*.swp
+*.swo
+
+# 操作系统文件
+.DS_Store
+Thumbs.db 

@@ -2,41 +2,34 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
-	"time"
 )
 
-var (
-	game     *Game
-	gameLock sync.Mutex
-	lastMove time.Time
-)
+var gameLock sync.Mutex
 
-type GameState struct {
-	Board    [][]string `json:"board"`
-	Score    int        `json:"score"`
-	GameOver bool       `json:"gameOver"`
-}
+func handleState(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Handling state request")
+	gameLock.Lock()
+	defer gameLock.Unlock()
 
-func init() {
-	game = NewGame(20, 10)
-	lastMove = time.Now()
+	// 将游戏状态转换为JSON
+	response := map[string]interface{}{
+		"board":    game.Board,
+		"score":    game.Score,
+		"gameOver": game.GameOver,
+	}
 
-	// Start auto-movement goroutine
-	go func() {
-		for {
-			time.Sleep(200 * time.Millisecond) // Move every 200ms
-			gameLock.Lock()
-			if !game.gameOver {
-				game.update()
-			}
-			gameLock.Unlock()
-		}
-	}()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		fmt.Printf("Error encoding response: %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func handleMove(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Handling move request")
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -46,6 +39,7 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 		Direction string `json:"direction"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&move); err != nil {
+		fmt.Printf("Error decoding request body: %v\n", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -53,73 +47,31 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 	gameLock.Lock()
 	defer gameLock.Unlock()
 
-	// Only allow direction changes if enough time has passed since last move
-	if time.Since(lastMove) < 100*time.Millisecond {
-		sendGameState(w)
-		return
-	}
-
+	// 更新方向
 	switch move.Direction {
 	case "up":
-		if game.direction.Y != 1 {
-			game.direction = Point{0, -1}
+		if game.Direction.Y != 1 { // 防止直接反向移动
+			game.Direction = Point{X: 0, Y: -1}
 		}
 	case "down":
-		if game.direction.Y != -1 {
-			game.direction = Point{0, 1}
+		if game.Direction.Y != -1 {
+			game.Direction = Point{X: 0, Y: 1}
 		}
 	case "left":
-		if game.direction.X != 1 {
-			game.direction = Point{-1, 0}
+		if game.Direction.X != 1 {
+			game.Direction = Point{X: -1, Y: 0}
 		}
 	case "right":
-		if game.direction.X != -1 {
-			game.direction = Point{1, 0}
+		if game.Direction.X != -1 {
+			game.Direction = Point{X: 1, Y: 0}
 		}
 	}
 
-	lastMove = time.Now()
-	sendGameState(w)
-}
-
-func handleGameState(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	gameLock.Lock()
-	defer gameLock.Unlock()
-	sendGameState(w)
-}
-
-func sendGameState(w http.ResponseWriter) {
-	state := GameState{
-		Board:    make([][]string, game.height),
-		Score:    game.score,
-		GameOver: game.gameOver,
-	}
-
-	for y := 0; y < game.height; y++ {
-		state.Board[y] = make([]string, game.width)
-		for x := 0; x < game.width; x++ {
-			state.Board[y][x] = "empty"
-		}
-	}
-
-	// Mark snake positions
-	for _, p := range game.snake {
-		state.Board[p.Y][p.X] = "snake"
-	}
-
-	// Mark food position
-	state.Board[game.food.Y][game.food.X] = "food"
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(state)
+	w.WriteHeader(http.StatusOK)
 }
 
 func handleRestart(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Handling restart request")
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -128,7 +80,6 @@ func handleRestart(w http.ResponseWriter, r *http.Request) {
 	gameLock.Lock()
 	defer gameLock.Unlock()
 
-	game = NewGame(20, 10)
-	lastMove = time.Now()
-	sendGameState(w)
+	game = NewGame(40, 20)
+	w.WriteHeader(http.StatusOK)
 }
